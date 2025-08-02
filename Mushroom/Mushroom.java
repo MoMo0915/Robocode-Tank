@@ -3,10 +3,13 @@ import dev.robocode.tankroyale.botapi.events.*;
 import dev.robocode.tankroyale.botapi.graphics.Color;
 
 import java.awt.*;
+import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Mushroom extends Bot {
     // 记录敌方发射的子弹波合集
@@ -68,18 +71,6 @@ public class Mushroom extends Bot {
         public EnemyWave() {
         }
     }
-
-    class WallState {
-        int id;
-        double x;
-        double y;
-        double width;
-        double height;
-        double rotation;
-    }
-
-    public List<WallState> customWalls = new ArrayList<>();
-
 
     // 根据子弹能量计算子弹速度
     public static double bulletVelocity(double power) {
@@ -499,7 +490,83 @@ public class Mushroom extends Bot {
         rescan();
     }
 
-    // 绘制方法(用于调试)
+    /*
+    * 新增“墙壁”设定相关处理
+    */
+
+    class Wall {
+        int id;
+        Line2D.Double line;
+        Point2D.Double center;
+        double rotation;
+
+        public Wall(ScannedWallEvent e) {
+            id = e.getScannedBotId();
+            rotation = e.getRotation();
+            center = new Point2D.Double(e.getX(), e.getY());
+
+            double centerX = e.getX(), centerY = e.getY(), height = e.getHeight();
+            double x1 = centerX + Math.cos(rotation) * height / 2;
+            double y1 = centerY + Math.sin(rotation) * height / 2;
+            double x2 = centerX - Math.cos(rotation) * height / 2;
+            double y2 = centerY - Math.sin(rotation) * height / 2;
+            line = new Line2D.Double(x1, y1, x2, y2);
+        }
+    }
+
+    public Map<Integer, Wall> detectedWalls = new HashMap<>();
+
+    public void onScannedWall(ScannedWallEvent e) {
+        int wallId = e.getScannedBotId();
+        if (!detectedWalls.containsKey(wallId)) {
+            Wall w = new Wall(e);
+            detectedWalls.put(wallId, w);
+        }
+
+        // 避障检测
+        avoidNearestWall();
+    }
+
+    public void avoidNearestWall() {
+        myLocation.setLocation(getX(), getY());
+
+        Wall nearestWall = null;
+        double minDistance = Double.MAX_VALUE;
+        for (Wall w : detectedWalls.values()) {
+            double A = w.line.getY2() - w.line.getY1();
+            double B = w.line.getX1() - w.line.getY1();
+            double C = w.line.getX2() * w.line.getY1() - w.line.getX1() * w.line.getY2();
+
+            double numerator = Math.abs(A * getX() + B * getY() + C);
+            double denominator = Math.sqrt(A * A + B * B);
+            double distance = numerator / denominator;
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestWall = w;
+            }
+        }
+
+        if (nearestWall != null && minDistance < 160) {
+            // 避障策略
+            adjustMovementAroundWall(nearestWall);
+        }
+    }
+
+    public void adjustMovementAroundWall(Wall nearestWall) {
+        myLocation.setLocation(getX(), getY());
+
+        // 平行于墙壁移动，为了避免移动过程中撞到其他自定义墙，雷达跟随车身，如何避免撞到边界呢？
+        double goAngle = nearestWall.rotation;
+        goAngle = wallSmoothing(myLocation, goAngle, Math.random() > 0.5 ? 1 : -1);
+
+        setAdjustRadarForGunTurn(false);
+        setAdjustGunForBodyTurn(false);
+        setBackAsFront(this, goAngle);
+        setAdjustGunForBodyTurn(true);
+        setAdjustRadarForGunTurn(true);
+    }
+
+    // 绘制方法（用于调试）
     public void onPaint(java.awt.Graphics2D g) {
         g.setColor(java.awt.Color.red);
         for(int i = 0; i < enemyWaves.size(); i++){
