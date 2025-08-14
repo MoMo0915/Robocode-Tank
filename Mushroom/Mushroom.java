@@ -31,13 +31,16 @@ public class Mushroom extends Bot {
     public double oppEnergy = 100.0;
     public double myEnergy = 100.0;
 
+    public Point2D.Double preLocation;
+    public Point2D.Double curLocation;
+
     // 战场边界
-    // 表示800x600战场的矩形区域
+    // 表示1200*1200战场的矩形区域
     // 用于简单的迭代式墙壁平滑方法（由Kawigi提出）
     // 如果不熟悉墙壁平滑，wall stick表示我们尝试在坦克两端保持的空间大小
     // （向前或向后延伸）以避免触碰墙壁
     public static Rectangle2D.Double fieldRect
-            = new java.awt.geom.Rectangle2D.Double(18, 18, 764, 564);
+            = new java.awt.geom.Rectangle2D.Double(20, 20, 1160, 1160);
 
     @Override
     public void run() {
@@ -46,17 +49,46 @@ public class Mushroom extends Bot {
         surfAbsBearings = new ArrayList<>();
 
         myLocation = new Point2D.Double(getX(), getY());
+        preLocation = new Point2D.Double(getX(), getY());
+        curLocation = new Point2D.Double(getX(), getY());
 
         // 设置炮塔独立于车身旋转
         setAdjustGunForBodyTurn(true);
         // 设置雷达独立于炮塔旋转
         setAdjustRadarForGunTurn(true);
 
+        setBotEventPriority(ScannedBotEvent.class, 120);
+        setBotEventPriority(HitWallEvent.class, 110);
+        setBotEventPriority(HitWallEvent.class, 100);
+        setBotEventPriority(ScannedWallEvent.class, 90);
+        setBotEventPriority(CustomEvent.class, 20);
+        setBotEventPriority(TeamMessageEvent.class, 15);
+        setBotEventPriority(BotDeathEvent.class, 30);
+        setBotEventPriority(BulletHitWallEvent.class, 40);
+
+        int t = 0;
+
         do {
             // 雷达无限旋转
             // turnRadarRight(Double.POSITIVE_INFINITY);
             turnRadarRight(30);
+
+            t++;
+            if (t == 30) {
+                if (curLocation.getX() == preLocation.getX() && curLocation.getY() == preLocation.getY() && getEnergy() >= 30) {
+                    forward(10);
+                    back(10);
+                }
+
+                preLocation.setLocation(curLocation.getX(), curLocation.getY());
+                curLocation.setLocation(getX(), getY());
+                t = 0;
+            }
         } while (isRunning());
+    }
+
+    public void setBotEventPriority(Class<? extends BotEvent> eventClass, int priority) {
+        setEventPriority((Class<BotEvent>) (Class<?>) eventClass, priority);
     }
 
     // 敌方波浪内部类
@@ -154,11 +186,11 @@ public class Mushroom extends Bot {
     // 迭代式墙壁平滑方法（由Kawigi提出）
     // 返回考虑墙壁平滑后的绝对移动角度
     public double wallSmoothing(Point2D.Double botLocation, double angle, int orientation) {
-       // // 微调角度直到不会撞墙
-       // while (!fieldRect.contains(project(botLocation, angle, 160))) {
-       //     angle += orientation * 0.05;
-       // }
-       // return angle;
+        // // 微调角度直到不会撞墙
+        // while (!fieldRect.contains(project(botLocation, angle, 160))) {
+        //     angle += orientation * 0.05;
+        // }
+        // return angle;
 
         // 1靠近敌人，-1远离敌人
         // int smoothTowardEnemy = Math.random() > 0.5 ? 1 : -1;
@@ -171,10 +203,10 @@ public class Mushroom extends Bot {
 
         double testX = x + (Math.sin(angle) * WALL_STICK);
         double testY = y + (Math.cos(angle) * WALL_STICK);
-        double wallDistanceX = Math.min(x - 18, 782 - x);
-        double wallDistanceY = Math.min(y - 18, 582 - y);
-        double testDistanceX = Math.min(testX - 18, 782 - testX);
-        double testDistanceY = Math.min(testY - 18, 582 - testY);
+        double wallDistanceX = Math.min(x - 20, 1180 - x);
+        double wallDistanceY = Math.min(y - 20, 1180 - y);
+        double testDistanceX = Math.min(testX - 20, 1180 - testX);
+        double testDistanceY = Math.min(testY - 20, 1180 - testY);
 
         double adjacent = 0;
         int g = 0;
@@ -198,8 +230,8 @@ public class Mushroom extends Bot {
 
             testX = x + (Math.sin(angle) * WALL_STICK);
             testY = y + (Math.cos(angle) * WALL_STICK);
-            testDistanceX = Math.min(testX - 18, 782 - testX);
-            testDistanceY = Math.min(testY - 18, 582 - testY);
+            testDistanceX = Math.min(testX - 20, 1180 - testX);
+            testDistanceY = Math.min(testY - 20, 1180 - testY);
 
             // if (smoothTowardEnemy == -1) {
             //     // this method ended with tank smoothing away from enemy... you may
@@ -326,8 +358,8 @@ public class Mushroom extends Bot {
         // 计算绝对角度
         double absBearing = bearingTo(e.getX(), e.getY()) + getDirection();
 
-       // turnGunRight(normalizeRelativeAngle(getGunDirection() - absBearing));
-       // fire(3);
+        // turnGunRight(normalizeRelativeAngle(getGunDirection() - absBearing));
+        // fire(3);
         doFire(e);
 
         // 雷达锁定敌人
@@ -364,12 +396,12 @@ public class Mushroom extends Bot {
         // 更新敌方能量
         oppEnergy = e.getEnergy();
 
-       //  更新敌方位置
-       // enemyLocation = project(
-       //         myLocation,
-       //         absBearing,
-       //         distanceTo(e.getX(), e.getY())
-       // );
+        //  更新敌方位置
+        // enemyLocation = project(
+        //         myLocation,
+        //         absBearing,
+        //         distanceTo(e.getX(), e.getY())
+        // );
         enemyLocation = new Point2D.Double(e.getX(), e.getY());
 
         // 更新所有波浪的状态
@@ -414,7 +446,7 @@ public class Mushroom extends Bot {
 
             // 遍历所有波浪，找出可能命中我们的那个
             for (int x = 0; x < enemyWaves.size(); x++) {
-                EnemyWave ew = (EnemyWave)enemyWaves.get(x);
+                EnemyWave ew = (EnemyWave) enemyWaves.get(x);
 
                 // 通过距离和速度匹配判断
                 if (Math.abs(ew.distanceTraveled - myLocation.distance(ew.fireLocation)) < 50
@@ -447,6 +479,10 @@ public class Mushroom extends Bot {
 
     public double calculateOptimalPower(ScannedBotEvent e) {
         double distance = distanceTo(e.getX(), e.getY());
+        if (getEnergy() <= 15 || distance > 1200) {
+            return 0;
+        }
+
         double enemyVelocity = e.getSpeed();
         double basePower = Math.min(3, 800 / distance);
 
@@ -465,7 +501,7 @@ public class Mushroom extends Bot {
         double absBearing = bearingTo(e.getX(), e.getY()) + getDirection();
         double gunTurnAngle = normalizeRelativeAngle(getGunDirection() - absBearing);
 
-        turnGunRight(gunTurnAngle);
+        setTurnGunRight(gunTurnAngle);
 
         // 动态能量计算
         double power = calculateOptimalPower(e);
@@ -485,14 +521,14 @@ public class Mushroom extends Bot {
 
     @Override
     public void onHitBot(HitBotEvent e) {
-        forward(100);
+        setForward(100);
 
         rescan();
     }
 
     /*
-    * 新增“墙壁”设定相关处理
-    */
+     * 新增“墙壁”设定相关处理
+     */
 
     class Wall {
         int id;
@@ -518,9 +554,16 @@ public class Mushroom extends Bot {
 
     public void onScannedWall(ScannedWallEvent e) {
         int wallId = e.getScannedBotId();
+        Wall w = null;
         if (!detectedWalls.containsKey(wallId)) {
-            Wall w = new Wall(e);
+            w = new Wall(e);
             detectedWalls.put(wallId, w);
+        } else {
+            w = detectedWalls.get(wallId);
+        }
+
+        if (getSpeed() == 0 || getDirection() >= w.rotation && getDirection() <= w.rotation + 180) {
+            return;
         }
 
         // 避障检测
@@ -559,30 +602,32 @@ public class Mushroom extends Bot {
         double goAngle = nearestWall.rotation;
         goAngle = wallSmoothing(myLocation, goAngle, Math.random() > 0.5 ? 1 : -1);
 
-        setAdjustRadarForGunTurn(false);
-        setAdjustGunForBodyTurn(false);
+        // setAdjustRadarForGunTurn(false);
+        // setAdjustGunForBodyTurn(false);
         setBackAsFront(this, goAngle);
-        setAdjustGunForBodyTurn(true);
-        setAdjustRadarForGunTurn(true);
+        // setAdjustGunForBodyTurn(true);
+        // setAdjustRadarForGunTurn(true);
     }
 
     // 绘制方法（用于调试）
     public void onPaint(java.awt.Graphics2D g) {
         g.setColor(java.awt.Color.red);
-        for(int i = 0; i < enemyWaves.size(); i++){
-            EnemyWave w = (EnemyWave)(enemyWaves.get(i));
+        for (int i = 0; i < enemyWaves.size(); i++) {
+            EnemyWave w = (EnemyWave) (enemyWaves.get(i));
             Point2D.Double center = w.fireLocation;
 
             // 计算波浪半径
-            int radius = (int)w.distanceTraveled;
+            int radius = (int) w.distanceTraveled;
 
             // 只在波浪接近本机时绘制(半径-40 < 距离中心)
-            if(radius - 40 < center.distance(myLocation))
-                g.drawOval((int)(center.x - radius), (int)(center.y - radius), radius*2, radius*2);
+            if (radius - 40 < center.distance(myLocation))
+                g.drawOval((int) (center.x - radius), (int) (center.y - radius), radius * 2, radius * 2);
         }
     }
 
     public static void main(String[] args) {
         new Mushroom().start();
+
+        System.out.println("hhhh");
     }
 }
